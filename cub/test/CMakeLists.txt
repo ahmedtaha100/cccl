@@ -548,3 +548,4 @@ endforeach() # Source file
 
 add_subdirectory(cmake)
 add_subdirectory(cubin-check)
+add_subdirectory(logging)
