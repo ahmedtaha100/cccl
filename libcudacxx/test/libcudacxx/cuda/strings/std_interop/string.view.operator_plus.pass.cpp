@@ -34,12 +34,12 @@
 #include <cuda/std/cassert>
 #include <cuda/std/string_view>
 #include <cuda/std/type_traits>
-#include <cuda/std/utility>
 #include <cuda/utility>
 
 #include <string>
 
 #include "literal.h"
+#include "test_allocator.h"
 
 template <class CharT>
 struct CustomCharTraits : cuda::std::char_traits<CharT>
@@ -148,11 +148,76 @@ constexpr void test_with_custom_type_traits()
   test_combination<HostS, CudaSV>();
 }
 
+template <class HostS, class CudaSV>
+void test_allocator_copy_constructed()
+{
+  using CharT     = typename HostS::value_type;
+  using Allocator = typename HostS::allocator_type;
+
+  {
+    test_alloc_base::clear();
+    {
+      Allocator alloc{42};
+      HostS lhs{TEST_STRLIT(CharT, "left"), alloc};
+      CudaSV rhs{TEST_STRLIT(CharT, "right")};
+
+      test_alloc_base::clear_ctor_counters();
+
+      HostS result = lhs + rhs;
+      assert(test_alloc_base::copied > 0);
+      assert(result == TEST_STRLIT(CharT, "leftright"));
+      assert(result.get_allocator().get_data() == 42);
+    }
+    assert(test_alloc_base::count == 0);
+  }
+  {
+    test_alloc_base::clear();
+    {
+      CudaSV lhs{TEST_STRLIT(CharT, "left")};
+      Allocator alloc{43};
+      HostS rhs{TEST_STRLIT(CharT, "right"), alloc};
+
+      test_alloc_base::clear_ctor_counters();
+
+      HostS result = lhs + rhs;
+      assert(test_alloc_base::copied > 0);
+      assert(result == TEST_STRLIT(CharT, "leftright"));
+      assert(result.get_allocator().get_data() == 43);
+    }
+    assert(test_alloc_base::count == 0);
+  }
+}
+
+template <class CharT>
+void test_allocator_copy_constructed_with_default_type_traits()
+{
+  using HostS  = std::basic_string<CharT, std::char_traits<CharT>, test_allocator<CharT>>;
+  using CudaSV = cuda::std::basic_string_view<CharT>;
+
+  test_allocator_copy_constructed<HostS, CudaSV>();
+}
+
+template <class CharT>
+void test_allocator_copy_constructed_with_custom_type_traits()
+{
+  using Traits = CustomCharTraits<CharT>;
+  using HostS  = std::basic_string<CharT, Traits, test_allocator<CharT>>;
+  using CudaSV = cuda::std::basic_string_view<CharT, Traits>;
+
+  test_allocator_copy_constructed<HostS, CudaSV>();
+}
+
 template <class CharT>
 constexpr void test_type()
 {
   test_with_default_type_traits<CharT>();
   test_with_custom_type_traits<CharT>();
+
+  if (!cuda::std::__cccl_default_is_constant_evaluated())
+  {
+    test_allocator_copy_constructed_with_default_type_traits<CharT>();
+    test_allocator_copy_constructed_with_custom_type_traits<CharT>();
+  }
 }
 
 constexpr bool test()
@@ -181,5 +246,6 @@ static_assert(test());
 int main(int, char**)
 {
   NV_IF_TARGET(NV_IS_HOST, (test();))
+
   return 0;
 }
