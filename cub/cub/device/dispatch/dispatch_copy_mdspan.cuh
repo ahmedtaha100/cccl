@@ -24,6 +24,7 @@
 #include <cuda/__algorithm/copy.h>
 #include <cuda/__functional/always_true_false.h>
 #include <cuda/__functional/call_or.h>
+#include <cuda/__runtime/ensure_current_context.h>
 #include <cuda/__stream/stream_ref.h>
 #include <cuda/__type_traits/is_trivially_copyable.h>
 #include <cuda/std/__concepts/same_as.h>
@@ -53,14 +54,33 @@ struct copy_mdspan_t
   }
 };
 
+[[nodiscard]] inline _CCCL_HOST_API ::cuda::__ensure_current_context
+__ensure_current_context_null_stream(::cuda::stream_ref __stream)
+{
+  // Normal __ensure_current_context() doesn't work for the NULL stream if no current context
+  // is set. So we need to get the default context from the current device, otherwise the
+  // mdspan copy errors with invalid_argument.
+  if (__stream.get() == nullptr)
+  {
+    int __curr_device{};
+
+    _CCCL_TRY_CUDA_API(::cudaGetDevice, "Failed to get current device", &__curr_device);
+    return ::cuda::__ensure_current_context{::cuda::device_ref{__curr_device}};
+  }
+
+  return ::cuda::__ensure_current_context{__stream};
+}
+
 template <class _MDSpanIn, class _MDSpanOut, class _Env>
 [[nodiscard]] _CCCL_HOST_API ::cudaError_t
 __copy_mdspan_bytes(_MDSpanIn&& __mdspan_in, _MDSpanOut&& __mdspan_out, const _Env& __env)
 {
   _CCCL_TRY
   {
-    ::cuda::copy_bytes(
-      ::cuda::__call_or(::cuda::get_stream, ::cuda::stream_ref{::cudaStream_t{}}, __env), __mdspan_in, __mdspan_out);
+    auto __stream = ::cuda::__call_or(::cuda::get_stream, ::cuda::stream_ref{::cudaStream_t{}}, __env);
+    const auto _  = CUB_NS_QUALIFIER::detail::copy_mdspan::__ensure_current_context_null_stream(__stream);
+
+    ::cuda::copy_bytes(__stream, __mdspan_in, __mdspan_out);
   }
   _CCCL_CATCH (const ::cuda::cuda_error& __e)
   {
