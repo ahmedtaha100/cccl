@@ -116,7 +116,7 @@ template <class T, class Op>
   }
 }
 
-[[nodiscard]] std::vector<offset_type> make_offsets(const std::vector<offset_type>& segment_sizes)
+[[nodiscard]] std::vector<offset_type> make_offsets(cuda::std::span<const offset_type> segment_sizes)
 {
   std::vector<offset_type> offsets{0};
 
@@ -144,7 +144,7 @@ uniform_values(int num_ranks, const cuda::std::array<offset_type, N>& segment_si
 }
 
 [[nodiscard]] std::vector<std::vector<offset_type>>
-uniform_offsets(int num_ranks, const std::vector<offset_type>& segment_sizes)
+uniform_offsets(int num_ranks, cuda::std::span<const offset_type> segment_sizes)
 {
   return std::vector<std::vector<offset_type>>(static_cast<cuda::std::size_t>(num_ranks), make_offsets(segment_sizes));
 }
