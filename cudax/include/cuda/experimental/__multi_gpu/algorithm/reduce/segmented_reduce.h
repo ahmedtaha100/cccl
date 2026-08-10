@@ -34,14 +34,17 @@
 #include <cuda/std/__functional/identity.h>
 #include <cuda/std/__functional/operations.h>
 #include <cuda/std/__iterator/readable_traits.h>
+#include <cuda/std/__memory/addressof.h>
 #include <cuda/std/__memory/pointer_traits.h>
 #include <cuda/std/__ranges/access.h>
 #include <cuda/std/__ranges/concepts.h>
 #include <cuda/std/__ranges/size.h>
 #include <cuda/std/__ranges/zip_view.h>
 #include <cuda/std/__tuple_dir/tie.h>
+#include <cuda/std/__type_traits/remove_reference.h>
 #include <cuda/std/__utility/move.h>
 #include <cuda/std/cstdint>
+#include <cuda/std/span>
 
 #include <cuda/experimental/__multi_gpu/algorithm/common.h>
 #include <cuda/experimental/__multi_gpu/concepts.h>
@@ -401,6 +404,48 @@ _CCCL_HOST_API void segmented_reduce(
     ::cuda::experimental::__detail::__segmented_reduce::__butterfly_reduction(
       __comms, __envs, __num_segments, __output_iters, __op, &__partials);
   }
+}
+
+_CCCL_TEMPLATE(
+  class _Policy,
+  class _Comm,
+  class _Env,
+  class _InputIter,
+  class _OffsetBeginIter,
+  class _OffsetEndIter,
+  class _OutputIter,
+  class _Tp       = ::cuda::std::iter_value_t<_InputIter>,
+  class _BinaryOp = ::cuda::std::plus<>)
+_CCCL_REQUIRES(__communicator<_Comm> _CCCL_AND //
+               ::cuda::std::random_access_iterator<_InputIter> _CCCL_AND //
+               ::cuda::std::random_access_iterator<_OffsetBeginIter> _CCCL_AND //
+               ::cuda::std::random_access_iterator<_OffsetEndIter> _CCCL_AND //
+               ::cuda::std::output_iterator<_OutputIter, _Tp>)
+_CCCL_HOST_API void segmented_reduce(
+  const __result_policy_base<_Policy>& __policy,
+  _Comm&& __comm,
+  _Env&& __env,
+  _InputIter __input,
+  ::cuda::std::size_t __num_segments,
+  _OffsetBeginIter __offset_begin,
+  _OffsetEndIter __offset_end,
+  _OutputIter __output,
+  _Tp __init     = {},
+  _BinaryOp __op = {},
+  _Tp __ident    = ::cuda::identity_element<_BinaryOp, _Tp>())
+{
+  ::cuda::experimental::segmented_reduce(
+    __policy,
+    ::cuda::std::span<::cuda::std::remove_reference_t<_Comm>, 1>{::cuda::std::addressof(__comm), 1},
+    ::cuda::std::span<::cuda::std::remove_reference_t<_Env>, 1>{::cuda::std::addressof(__env), 1},
+    ::cuda::std::span<_InputIter, 1>{::cuda::std::addressof(__input), 1},
+    __num_segments,
+    ::cuda::std::span<_OffsetBeginIter, 1>{::cuda::std::addressof(__offset_begin), 1},
+    ::cuda::std::span<_OffsetEndIter, 1>{::cuda::std::addressof(__offset_end), 1},
+    ::cuda::std::span<_OutputIter, 1>{::cuda::std::addressof(__output), 1},
+    ::cuda::std::move(__init),
+    ::cuda::std::move(__op),
+    ::cuda::std::move(__ident));
 }
 } // namespace cuda::experimental
 
